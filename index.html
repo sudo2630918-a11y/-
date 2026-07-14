@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>대한민국 여름철 기온 대시보드</title>
+<style>
+  @font-face {
+    font-family: 'Pretendard';
+    src: local('Pretendard');
+  }
+  :root{
+    --bg: #0b0e14;
+    --panel: #12161f;
+    --panel-2: #171c27;
+    --line: #232a38;
+    --text: #f2ede4;
+    --muted: #8b93a5;
+    --cool: #2dd4bf;
+    --warm: #f5a623;
+    --hot: #e63946;
+  }
+  *{ box-sizing: border-box; }
+  html,body{ margin:0; padding:0; }
+  body{
+    background: radial-gradient(1200px 700px at 15% -10%, #1a2130 0%, var(--bg) 55%);
+    color: var(--text);
+    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap{ max-width: 1180px; margin: 0 auto; padding: 28px 20px 60px; }
+
+  header{ margin-bottom: 26px; }
+  .eyebrow{
+    font-size: 12px; letter-spacing: .18em; text-transform: uppercase;
+    color: var(--warm); font-weight: 700; margin-bottom: 8px;
+  }
+  h1{
+    font-size: clamp(24px, 4vw, 34px); margin: 0 0 6px; font-weight: 800; letter-spacing: -0.02em;
+  }
+  .sub{ color: var(--muted); font-size: 14px; margin: 0; }
+
+  .status{
+    margin-top: 14px; font-size: 13px; color: var(--muted);
+    padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px;
+    background: var(--panel); display:none;
+  }
+  .status.show{ display:block; }
+  .status.error{ color: #ffb4b4; border-color:#5a2530; background:#1c1116; }
+
+  .layout{
+    display: grid; grid-template-columns: 380px 1fr; gap: 20px;
+  }
+  @media (max-width: 880px){
+    .layout{ grid-template-columns: 1fr; }
+  }
+
+  .panel{
+    background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+    padding: 18px;
+  }
+  .panel h2{ font-size: 13px; text-transform: uppercase; letter-spacing:.1em; color: var(--muted); margin: 0 0 14px; font-weight:700;}
+
+  /* --- map --- */
+  .map-panel{ position: sticky; top: 20px; align-self: start; }
+  .map-svg-wrap{ position: relative; }
+  svg#korea{ width: 100%; height: auto; display:block; }
+  .peninsula{ fill: #1a2030; stroke: #303a4f; stroke-width: 2; }
+  .marker-group{ cursor: pointer; }
+  .marker-halo{ transition: r .25s ease, opacity .25s ease; opacity:.35; }
+  .marker-dot{ transition: r .25s ease, fill .25s ease; stroke: #05070b; stroke-width: 2; }
+  .marker-label{
+    font-size: 13px; font-weight: 700; fill: var(--text);
+    paint-order: stroke; stroke: #0b0e14; stroke-width: 4px; stroke-linejoin: round;
+  }
+  .marker-value{
+    font-size: 11px; font-weight: 600; fill: var(--muted);
+    paint-order: stroke; stroke: #0b0e14; stroke-width: 4px; stroke-linejoin: round;
+  }
+  .marker-group.active .marker-dot{ stroke: var(--warm); stroke-width: 3; }
+  .marker-group:focus{ outline:none; }
+  .marker-group:focus .marker-dot{ stroke: #fff; }
+
+  .legend{ margin-top: 16px; }
+  .legend-bar{
+    height: 10px; border-radius: 6px;
+    background: linear-gradient(90deg, var(--cool), var(--warm), var(--hot));
+  }
+  .legend-ticks{ display:flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 6px; }
+  .legend-caption{ font-size: 12px; color: var(--muted); margin-top: 10px; line-height:1.5; }
+
+  /* --- controls --- */
+  .controls{
+    display:flex; align-items:center; gap: 14px; flex-wrap: wrap; margin-bottom: 18px;
+  }
+  .region-pill-row{ display:flex; gap:8px; flex-wrap:wrap; }
+  .pill{
+    padding: 7px 14px; border-radius: 999px; border: 1px solid var(--line);
+    background: var(--panel-2); color: var(--muted); font-size: 13px; font-weight:600;
+    cursor:pointer; transition: all .15s ease;
+  }
+  .pill:hover{ border-color: var(--warm); color: var(--text); }
+  .pill.active{ background: var(--warm); color: #1a1200; border-color: var(--warm); }
+
+  .year-select-wrap{ display:flex; align-items:center; gap:8px; margin-left:auto; }
+  .year-select-wrap label{ font-size: 12px; color: var(--muted); }
+  select#yearSelect{
+    background: var(--panel-2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: 7px 10px; font-size: 13px; font-family: inherit;
+  }
+
+  /* --- hero stats --- */
+  .hero{
+    display:grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 20px;
+  }
+  @media (max-width: 560px){ .hero{ grid-template-columns: 1fr; } }
+  .stat-card{
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px;
+  }
+  .stat-card .stat-label{ font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .stat-card .stat-value{ font-size: 30px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .stat-card .stat-value span{ font-size: 16px; font-weight: 600; color: var(--muted); }
+  .stat-card.hot .stat-value{ color: var(--hot); }
+  .stat-card.warm .stat-value{ color: var(--warm); }
+  .stat-card.cool .stat-value{ color: var(--cool); }
+
+  /* --- ranking --- */
+  .rank-row{ display:flex; align-items:center; gap: 10px; margin: 10px 0; }
+  .rank-city{ width: 46px; font-size: 13px; font-weight: 700; flex-shrink:0; }
+  .rank-track{ flex:1; height: 14px; background: var(--panel-2); border-radius: 8px; overflow:hidden; border:1px solid var(--line); }
+  .rank-fill{ height: 100%; border-radius: 8px; transition: width .4s ease; }
+  .rank-val{ width: 54px; text-align:right; font-size: 13px; font-variant-numeric: tabular-nums; color: var(--muted); flex-shrink:0; }
+  .rank-row.selected .rank-city{ color: var(--warm); }
+  .rank-row.selected .rank-val{ color: var(--text); font-weight:700; }
+
+  /* --- charts --- */
+  .chart-wrap{ position: relative; }
+  canvas{ width: 100%; height: 260px; display:block; }
+  .chart-legend{ display:flex; gap: 16px; margin-top: 10px; flex-wrap:wrap; }
+  .chart-legend-item{ display:flex; align-items:center; gap:6px; font-size: 12px; color: var(--muted); }
+  .swatch{ width: 10px; height: 10px; border-radius: 3px; display:inline-block; }
+  .tooltip{
+    position:absolute; pointer-events:none; background:#05070b; border:1px solid var(--line);
+    border-radius: 8px; padding: 8px 10px; font-size: 12px; line-height:1.5; color: var(--text);
+    opacity:0; transform: translate(-50%,-110%); transition: opacity .12s ease; white-space:nowrap;
+    z-index: 5;
+  }
+  .tooltip.show{ opacity:1; }
+
+  .section-gap{ margin-top: 22px; }
+  footer{ margin-top: 30px; font-size: 12px; color: var(--muted); line-height:1.6; }
+  footer code{ background: var(--panel-2); padding: 1px 6px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">폭염 · 여름철 기온 대시보드</div>
+    <h1>지도를 눌러 도시별 여름 기온을 확인하세요</h1>
+    <p class="sub">기상청 기온분석 자료 · 서울·부산·대구·인천 · 2015~2024년 6~8월</p>
+    <div id="status" class="status">데이터를 불러오는 중입니다…</div>
+  </header>
+
+  <div class="layout">
+
+    <!-- 지도 -->
+    <div class="panel map-panel">
+      <h2>지역 선택</h2>
+      <div class="map-svg-wrap">
+        <svg id="korea" viewBox="0 0 340 460" xmlns="http://www.w3.org/2000/svg">
+          <path class="peninsula" d="M172,14 C226,10 262,42 256,86
+            C296,104 318,152 300,196
+            C330,222 322,272 292,296
+            C312,326 300,376 262,398
+            C256,428 224,452 194,448
+            C170,445 164,418 154,398
+            C114,392 92,358 100,320
+            C70,300 60,262 84,228
+            C58,198 64,152 100,128
+            C88,92 110,56 150,36
+            C156,26 162,18 172,14 Z"/>
+          <!-- 마커는 JS에서 생성 -->
+          <g id="markers"></g>
+        </svg>
+      </div>
+      <div class="legend">
+        <div class="legend-bar"></div>
+        <div class="legend-ticks"><span id="legendMin">-</span><span>기온 (최고기온 기준)</span><span id="legendMax">-</span></div>
+        <p class="legend-caption">마커의 색과 크기는 해당 도시 최신 연도(2024)의 여름 평균 최고기온을 나타냅니다. 도시를 클릭하면 오른쪽 데이터가 갱신됩니다.</p>
+      </div>
+    </div>
+
+    <!-- 데이터 패널 -->
+    <div>
+      <div class="panel">
+        <div class="controls">
+          <div class="region-pill-row" id="pillRow"></div>
+          <div class="year-select-wrap">
+            <label for="yearSelect">연도</label>
+            <select id="yearSelect"></select>
+          </div>
+        </div>
+
+        <div class="hero" id="heroStats">
+          <div class="stat-card hot">
+            <div class="stat-label" id="hotLabel">평균 최고기온</div>
+            <div class="stat-value" id="hotValue">-<span>℃</span></div>
+          </div>
+          <div class="stat-card warm">
+            <div class="stat-label">평균기온</div>
+            <div class="stat-value" id="avgValue">-<span>℃</span></div>
+          </div>
+          <div class="stat-card cool">
+            <div class="stat-label">평균 최저기온</div>
+            <div class="stat-value" id="coolValue">-<span>℃</span></div>
+          </div>
+        </div>
+
+        <h2>선택 연도 · 도시별 평균 최고기온 순위</h2>
+        <div id="rankList"></div>
+      </div>
+
+      <div class="panel section-gap">
+        <h2 id="lineChartTitle">연도별 여름 평균기온 추이 (2015~2024)</h2>
+        <div class="chart-wrap">
+          <canvas id="lineChart"></canvas>
+          <div class="tooltip" id="lineTooltip"></div>
+        </div>
+        <div class="chart-legend">
+          <span class="chart-legend-item"><span class="swatch" style="background:var(--hot)"></span>평균 최고기온</span>
+          <span class="chart-legend-item"><span class="swatch" style="background:var(--cool)"></span>평균 최저기온</span>
+        </div>
+      </div>
+
+      <div class="panel section-gap">
+        <h2 id="barChartTitle">월별(6·7·8월) 기온 비교</h2>
+        <div class="chart-wrap">
+          <canvas id="barChart"></canvas>
+          <div class="tooltip" id="barTooltip"></div>
+        </div>
+        <div class="chart-legend">
+          <span class="chart-legend-item"><span class="swatch" style="background:var(--cool)"></span>평균 최저기온</span>
+          <span class="chart-legend-item"><span class="swatch" style="background:var(--warm)"></span>평균기온</span>
+          <span class="chart-legend-item"><span class="swatch" style="background:var(--hot)"></span>평균 최고기온</span>
+        </div>
+      </div>
+
+      <footer>
+        이 페이지는 같은 폴더의 4개 CSV 파일을 <code>fetch()</code>로 직접 읽습니다. 브라우저 보안 정책상
+        <code>file://</code>로 열면 CSV를 불러오지 못할 수 있습니다 — 폴더에서 터미널을 열고
+        <code>python -m http.server</code> 실행 후 <code>http://localhost:8000</code> 으로 접속해 주세요.
+      </footer>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---------------------------------------------------------
+   1. 설정: 실제 업로드된 파일명 / 열 이름 그대로 사용
+--------------------------------------------------------- */
+const REGIONS = [
+  { key: '서울', file: 'ta_20260714103439.csv', station: '108', x: 150, y: 128, color: '#f5a623' },
+  { key: '인천', file: 'ta_20260714103529.csv', station: '112', x: 106, y: 140, color: '#8b7bd8' },
+  { key: '대구', file: 'ta_20260714103516.csv', station: '143', x: 228, y: 300, color: '#2dd4bf' },
+  { key: '부산', file: 'ta_20260714103506.csv', station: '159', x: 270, y: 358, color: '#e63946' },
+];
+const MONTH_LABELS = { '06': '6월', '07': '7월', '08': '8월' };
+
+const COOL = '#2dd4bf', WARM = '#f5a623', HOT = '#e63946';
+
+let dataByRegion = {};   // { 서울: [ {year,month,avg,min,max}, ... ] }
+let allYears = [];       // ['2015', ..., '2024']
+let tempDomain = { min: 15, max: 35 };
+
+let state = { region: '서울', year: null };
+
+/* ---------------------------------------------------------
+   2. CSV 로드 & 파싱 (cp949 인코딩)
+--------------------------------------------------------- */
+async function loadCSV(file) {
+  const res = await fetch(file);
+  if (!res.ok) throw new Error(file + ' 을(를) 불러올 수 없습니다 (HTTP ' + res.status + ')');
+  const buf = await res.arrayBuffer();
+  const text = new TextDecoder('euc-kr').decode(buf); // cp949 호환 디코딩
+  return parseKmaCsv(text);
+}
+
+function parseKmaCsv(text) {
+  // 데이터 행만 추출: "YYYY-MM,지점,평균,최저,최고" 패턴
+  const lines = text.split(/\r?\n/);
+  const rows = [];
+  for (const raw of lines) {
+    const line = raw.trim();
+    const m = line.match(/^(\d{4})-(\d{2}),\s*([\d.]+)?,\s*([\d.]+),\s*([\d.]+),\s*([\d.]+)$/);
+    if (!m) continue;
+    rows.push({
+      year: m[1],
+      month: m[2],
+      station: m[3],
+      avg: parseFloat(m[4]),
+      min: parseFloat(m[5]),
+      max: parseFloat(m[6]),
+    });
+  }
+  return rows;
+}
+
+async function init() {
+  const statusEl = document.getElementById('status');
+  statusEl.classList.add('show');
+  try {
+    const results = await Promise.all(REGIONS.map(r => loadCSV(r.file)));
+    REGIONS.forEach((r, i) => { dataByRegion[r.key] = results[i]; });
+
+    // 연도 목록 & 기온 도메인 계산
+    const yearSet = new Set();
+    let mn = Infinity, mx = -Infinity;
+    Object.values(dataByRegion).forEach(rows => rows.forEach(r => {
+      yearSet.add(r.year);
+      mn = Math.min(mn, r.min); mx = Math.max(mx, r.max);
+    }));
+    allYears = Array.from(yearSet).sort();
+    tempDomain = { min: Math.floor(mn - 1), max: Math.ceil(mx + 1) };
+    state.year = allYears[allYears.length - 1];
+
+    statusEl.classList.remove('show');
+    buildControls();
+    buildMarkers();
+    render();
+    window.addEventListener('resize', render);
+  } catch (err) {
+    statusEl.textContent = '⚠ ' + err.message + ' — index.html과 CSV 4개 파일이 같은 폴더에 있는지, 로컬 서버로 열었는지 확인해주세요.';
+    statusEl.classList.add('error');
+    console.error(err);
+  }
+}
+
+/* ---------------------------------------------------------
+   3. 유틸: 색상 스케일 (냉 → 온 → 열)
+--------------------------------------------------------- */
+function hexToRgb(hex){ const n=parseInt(hex.slice(1),16); return [(n>>16)&255,(n>>8)&255,n&255]; }
+function rgbToCss(rgb){ return `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`; }
+function lerp(a,b,t){ return a+(b-a)*t; }
+function lerpRgb(c1,c2,t){ return [lerp(c1[0],c2[0],t),lerp(c1[1],c2[1],t),lerp(c1[2],c2[2],t)]; }
+
+function tempToColor(v) {
+  const { min, max } = tempDomain;
+  let t = (v - min) / (max - min);
+  t = Math.max(0, Math.min(1, t));
+  const cCool = hexToRgb(COOL), cWarm = hexToRgb(WARM), cHot = hexToRgb(HOT);
+  if (t < 0.5) return rgbToCss(lerpRgb(cCool, cWarm, t / 0.5));
+  return rgbToCss(lerpRgb(cWarm, cHot, (t - 0.5) / 0.5));
+}
+
+function summerRows(regionKey, year) {
+  return dataByRegion[regionKey].filter(r => r.year === year).sort((a,b)=>a.month.localeCompare(b.month));
+}
+function yearlyAverage(regionKey, year, field) {
+  const rows = summerRows(regionKey, year);
+  if (!rows.length) return null;
+  return rows.reduce((s,r)=>s+r[field],0) / rows.length;
+}
+
+/* ---------------------------------------------------------
+   4. 지도 마커 생성
+--------------------------------------------------------- */
+function buildMarkers() {
+  const g = document.getElementById('markers');
+  g.innerHTML = '';
+  const latestYear = allYears[allYears.length - 1];
+  document.getElementById('legendMin').textContent = tempDomain.min + '℃';
+  document.getElementById('legendMax').textContent = tempDomain.max + '℃';
+
+  REGIONS.forEach(r => {
+    const val = yearlyAverage(r.key, latestYear, 'max');
+    const color = tempToColor(val);
+    const t = Math.max(0, Math.min(1, (val - tempDomain.min) / (tempDomain.max - tempDomain.min)));
+    const radius = 10 + t * 8;
+
+    const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    group.setAttribute('class', 'marker-group');
+    group.setAttribute('data-region', r.key);
+    group.setAttribute('tabindex', '0');
+    group.setAttribute('role', 'button');
+    group.setAttribute('aria-label', r.key + ' 선택');
+
+    const halo = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    halo.setAttribute('class', 'marker-halo');
+    halo.setAttribute('cx', r.x); halo.setAttribute('cy', r.y);
+    halo.setAttribute('r', radius + 10);
+    halo.setAttribute('fill', color);
+
+    const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    dot.setAttribute('class', 'marker-dot');
+    dot.setAttribute('cx', r.x); dot.setAttribute('cy', r.y);
+    dot.setAttribute('r', radius);
+    dot.setAttribute('fill', color);
+
+    const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    label.setAttribute('class', 'marker-label');
+    label.setAttribute('x', r.x); label.setAttribute('y', r.y - radius - 10);
+    label.setAttribute('text-anchor', 'middle');
+    label.textContent = r.key;
+
+    const valueText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    valueText.setAttribute('class', 'marker-value');
+    valueText.setAttribute('x', r.x); valueText.setAttribute('y', r.y + radius + 16);
+    valueText.setAttribute('text-anchor', 'middle');
+    valueText.textContent = val.toFixed(1) + '℃';
+
+    group.append(halo, dot, label, valueText);
+    group.addEventListener('click', () => selectRegion(r.key));
+    group.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') selectRegion(r.key); });
+    g.appendChild(group);
+  });
+}
+
+function updateMarkerActiveState() {
+  document.querySelectorAll('.marker-group').forEach(el => {
+    el.classList.toggle('active', el.getAttribute('data-region') === state.region);
+  });
+}
+
+/* ---------------------------------------------------------
+   5. 상단 컨트롤 (도시 pill, 연도 선택)
+--------------------------------------------------------- */
+function buildControls() {
+  const pillRow = document.getElementById('pillRow');
+  pillRow.innerHTML = '';
+  REGIONS.forEach(r => {
+    const btn = document.createElement('button');
+    btn.className = 'pill';
+    btn.textContent = r.key;
+    btn.addEventListener('click', () => selectRegion(r.key));
+    btn.dataset.region = r.key;
+    pillRow.appendChild(btn);
+  });
+
+  const yearSelect = document.getElementById('yearSelect');
+  yearSelect.innerHTML = '';
+  allYears.forEach(y => {
+    const opt = document.createElement('option');
+    opt.value = y; opt.textContent = y + '년';
+    yearSelect.appendChild(opt);
+  });
+  yearSelect.value = state.year;
+  yearSelect.addEventListener('change', () => { state.year = yearSelect.value; render(); });
+}
+
+function selectRegion(key) {
+  state.region = key;
+  render();
+}
+
+/* ---------------------------------------------------------
+   6. 렌더링: 히어로 통계 / 순위 / 차트
+--------------------------------------------------------- */
+function render() {
+  updateMarkerActiveState();
+  document.querySelectorAll('.pill').forEach(p => p.classList.toggle('active', p.dataset.region === state.region));
+
+  renderHero();
+  renderRanking();
+  renderLineChart();
+  renderBarChart();
+}
+
+function renderHero() {
+  const avg = yearlyAverage(state.region, state.year, 'avg');
+  const min = yearlyAverage(state.region, state.year, 'min');
+  const max = yearlyAverage(state.region, state.year, 'max');
+  document.getElementById('hotLabel').textContent = `${state.region} · ${state.year}년 여름 평균 최고기온`;
+  document.getElementById('hotValue').innerHTML = max.toFixed(1) + '<span>℃</span>';
+  document.getElementById('avgValue').innerHTML = avg.toFixed(1) + '<span>℃</span>';
+  document.getElementById('coolValue').innerHTML = min.toFixed(1) + '<span>℃</span>';
+  document.getElementById('lineChartTitle').textContent = `${state.region} · 연도별 여름 평균기온 추이 (2015~2024)`;
+  document.getElementById('barChartTitle').textContent = `${state.region} · ${state.year}년 월별(6·7·8월) 기온 비교`;
+}
+
+function renderRanking() {
+  const list = REGIONS.map(r => ({
+    key: r.key,
+    val: yearlyAverage(r.key, state.year, 'max'),
+  })).sort((a,b) => b.val - a.val);
+
+  const wrap = document.getElementById('rankList');
+  wrap.innerHTML = '';
+  const maxVal = Math.max(...list.map(l => l.val));
+  list.forEach(item => {
+    const row = document.createElement('div');
+    row.className = 'rank-row' + (item.key === state.region ? ' selected' : '');
+    row.style.cursor = 'pointer';
+    row.addEventListener('click', () => selectRegion(item.key));
+
+    const city = document.createElement('div');
+    city.className = 'rank-city'; city.textContent = item.key;
+
+    const track = document.createElement('div');
+    track.className = 'rank-track';
+    const fill = document.createElement('div');
+    fill.className = 'rank-fill';
+    fill.style.width = (item.val / maxVal * 100).toFixed(1) + '%';
+    fill.style.background = tempToColor(item.val);
+    track.appendChild(fill);
+
+    const val = document.createElement('div');
+    val.className = 'rank-val'; val.textContent = item.val.toFixed(1) + '℃';
+
+    row.append(city, track, val);
+    wrap.appendChild(row);
+  });
+}
+
+/* ---------------------------------------------------------
+   7. Canvas 차트: 공통 유틸
+--------------------------------------------------------- */
+function setupCanvas(canvas) {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = Math.max(1, rect.width * dpr);
+  canvas.height = Math.max(1, rect.height * dpr);
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0,0,rect.width,rect.height);
+  return { ctx, width: rect.width, height: rect.height };
+}
+
+const PADDING = { top: 16, right: 16, bottom: 28, left: 38 };
+
+function niceRange(min, max) {
+  const pad = (max - min) * 0.15 || 1;
+  return [Math.floor(min - pad), Math.ceil(max + pad)];
+}
+
+/* ---------------------------------------------------------
+   8. 라인 차트: 연도별 최고/최저 추이
+--------------------------------------------------------- */
+let lineChartGeom = null;
+
+function renderLineChart() {
+  const canvas = document.getElementById('lineChart');
+  const { ctx, width, height } = setupCanvas(canvas);
+
+  const maxSeries = allYears.map(y => yearlyAverage(state.region, y, 'max'));
+  const minSeries = allYears.map(y => yearlyAverage(state.region, y, 'min'));
+  const [yMin, yMax] = niceRange(Math.min(...minSeries), Math.max(...maxSeries));
+
+  const plotW = width - PADDING.left - PADDING.right;
+  const plotH = height - PADDING.top - PADDING.bottom;
+  const xFor = i => PADDING.left + (plotW * i) / (allYears.length - 1);
+  const yFor = v => PADDING.top + plotH - ((v - yMin) / (yMax - yMin)) * plotH;
+
+  // 그리드
+  ctx.strokeStyle = '#232a38'; ctx.lineWidth = 1; ctx.font = '11px sans-serif';
+  ctx.fillStyle = '#8b93a5'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  const gridLines = 4;
+  for (let g = 0; g <= gridLines; g++) {
+    const v = yMin + ((yMax - yMin) * g) / gridLines;
+    const y = yFor(v);
+    ctx.beginPath(); ctx.moveTo(PADDING.left, y); ctx.lineTo(width - PADDING.right, y); ctx.stroke();
+    ctx.fillText(v.toFixed(0), PADDING.left - 6, y);
+  }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  allYears.forEach((y, i) => {
+    if (i % 2 === 0 || allYears.length <= 6) ctx.fillText(y.slice(2), xFor(i), height - PADDING.bottom + 8);
+  });
+
+  function drawLine(series, color) {
+    ctx.beginPath();
+    series.forEach((v, i) => { const x = xFor(i), y = yFor(v); i === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y); });
+    ctx.strokeStyle = color; ctx.lineWidth = 2.4; ctx.lineJoin = 'round'; ctx.stroke();
+    series.forEach((v, i) => {
+      ctx.beginPath(); ctx.arc(xFor(i), yFor(v), 3.2, 0, Math.PI*2);
+      ctx.fillStyle = color; ctx.fill();
+    });
+  }
+  drawLine(maxSeries, HOT);
+  drawLine(minSeries, COOL);
+
+  lineChartGeom = { xFor, width, height, allYears, maxSeries, minSeries, canvas };
+}
+
+function initLineTooltip() {
+  const canvas = document.getElementById('lineChart');
+  const tip = document.getElementById('lineTooltip');
+  canvas.addEventListener('mousemove', (e) => {
+    if (!lineChartGeom) return;
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    let idx = 0, best = Infinity;
+    lineChartGeom.allYears.forEach((y,i) => {
+      const d = Math.abs(lineChartGeom.xFor(i) - mx);
+      if (d < best) { best = d; idx = i; }
+    });
+    const y = lineChartGeom.allYears[idx];
+    tip.innerHTML = `<b>${y}년</b><br>최고 ${lineChartGeom.maxSeries[idx].toFixed(1)}℃ · 최저 ${lineChartGeom.minSeries[idx].toFixed(1)}℃`;
+    tip.style.left = lineChartGeom.xFor(idx) + 'px';
+    tip.style.top = '0px';
+    tip.classList.add('show');
+  });
+  canvas.addEventListener('mouseleave', () => tip.classList.remove('show'));
+}
+
+/* ---------------------------------------------------------
+   9. 바 차트: 월별 최저/평균/최고
+--------------------------------------------------------- */
+let barChartGeom = null;
+
+function renderBarChart() {
+  const canvas = document.getElementById('barChart');
+  const { ctx, width, height } = setupCanvas(canvas);
+  const rows = summerRows(state.region, state.year); // 6,7,8월
+  const months = rows.map(r => MONTH_LABELS[r.month]);
+  const groups = [
+    { label: '최저', color: COOL, key: 'min' },
+    { label: '평균', color: WARM, key: 'avg' },
+    { label: '최고', color: HOT, key: 'max' },
+  ];
+  const allVals = rows.flatMap(r => [r.min, r.avg, r.max]);
+  const [yMin, yMax] = niceRange(Math.min(...allVals, 0), Math.max(...allVals));
+
+  const plotW = width - PADDING.left - PADDING.right;
+  const plotH = height - PADDING.top - PADDING.bottom;
+  const yFor = v => PADDING.top + plotH - ((v - yMin) / (yMax - yMin)) * plotH;
+
+  // 그리드
+  ctx.strokeStyle = '#232a38'; ctx.lineWidth = 1; ctx.font = '11px sans-serif';
+  ctx.fillStyle = '#8b93a5'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let g = 0; g <= 4; g++) {
+    const v = yMin + ((yMax - yMin) * g) / 4;
+    const y = yFor(v);
+    ctx.beginPath(); ctx.moveTo(PADDING.left, y); ctx.lineTo(width - PADDING.right, y); ctx.stroke();
+    ctx.fillText(v.toFixed(0), PADDING.left - 6, y);
+  }
+
+  const groupW = plotW / months.length;
+  const barW = groupW / (groups.length + 1.5);
+  const bars = [];
+
+  months.forEach((m, gi) => {
+    const groupX = PADDING.left + groupW * gi + groupW / 2;
+    groups.forEach((grp, bi) => {
+      const val = rows[gi][grp.key];
+      const barX = groupX - (groups.length * barW) / 2 + bi * barW;
+      const barY = yFor(val);
+      const barH = (PADDING.top + plotH) - barY;
+      ctx.fillStyle = grp.color;
+      ctx.fillRect(barX, barY, barW * 0.86, barH);
+      bars.push({ x: barX, y: barY, w: barW*0.86, h: barH, val, label: `${m} · ${grp.label}` });
+    });
+    ctx.fillStyle = '#8b93a5'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.fillText(m, groupX, height - PADDING.bottom + 8);
+  });
+
+  barChartGeom = { bars, canvas };
+}
+
+function initBarTooltip() {
+  const canvas = document.getElementById('barChart');
+  const tip = document.getElementById('barTooltip');
+  canvas.addEventListener('mousemove', (e) => {
+    if (!barChartGeom) return;
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    const hit = barChartGeom.bars.find(b => mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h);
+    if (hit) {
+      tip.innerHTML = `<b>${hit.label}</b><br>${hit.val.toFixed(1)}℃`;
+      tip.style.left = (hit.x + hit.w/2) + 'px';
+      tip.style.top = hit.y + 'px';
+      tip.classList.add('show');
+    } else {
+      tip.classList.remove('show');
+    }
+  });
+  canvas.addEventListener('mouseleave', () => tip.classList.remove('show'));
+}
+
+/* ---------------------------------------------------------
+   10. 시작
+--------------------------------------------------------- */
+initLineTooltip();
+initBarTooltip();
+init();
+</script>
+</body>
+</html>
